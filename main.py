@@ -57,7 +57,7 @@ async def create_voice(text):
 
 # 🔄 המרה ל־WAV
 def convert_to_wav(wav_filename):
-    subprocess.run([FFMPEG_PATH, "-y", "-i", MP3_FILE, "-ar", "24000", "-ac", "1", "-sample_fmt", "s16", wav_filename])
+    subprocess.run([FFMPEG_PATH, "-y", "-i", MP3_FILE, "-ar", "8000", "-ac", "1", "-acodec", "pcm_s16le", wav_filename])
 
 # ⬆️ העלאה לימות המשיח
 def upload_to_yemot(wav_filename):
