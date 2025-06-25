@@ -1,19 +1,20 @@
 import os
 import time
 import requests
-from bs4 import BeautifulSoup
-from edge_tts import Communicate
-from requests_toolbelt.multipart.encoder import MultipartEncoder
+import re
 import subprocess
 import urllib.request
 import tarfile
-import re
+import asyncio
+from bs4 import BeautifulSoup
+from edge_tts import Communicate
+from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 # ⚙️ פרטי התחברות למערכת ימות המשיח
 USERNAME = "0747097784"
 PASSWORD = "595944"
 TOKEN = f"{USERNAME}:{PASSWORD}"
-UPLOAD_PATH_PREFIX = "ivr2:/3/"  # שלוחה 3
+UPLOAD_PATH_PREFIX = "ivr2:/3/"
 
 # 🧾 שמות קבצים
 MP3_FILE = "amitsegal.mp3"
@@ -35,7 +36,7 @@ def ensure_ffmpeg():
                     tar.extract(member, path="bin")
         os.chmod(FFMPEG_PATH, 0o755)
 
-# 🌐 שליפת ההודעה האחרונה מהערוץ
+# 🌐 שליפת ההודעה האחרונה מטלגרם
 def get_last_telegram_message(channel_username):
     url = f"https://t.me/s/{channel_username}"
     response = requests.get(url, verify=False)
@@ -47,19 +48,26 @@ def get_last_telegram_message(channel_username):
     if not messages:
         print("❌ לא נמצאו הודעות.")
         return None
-    last_message = messages[-1].get_text(strip=True)
-    return last_message
+    return messages[-1].get_text(strip=True)
 
-# 🧠 הפקת קול
+# 🎙️ יצירת קול בקובץ MP3
 async def create_voice(text):
     communicate = Communicate(text=text, voice="he-IL-AvriNeural")
     await communicate.save(MP3_FILE)
 
-# 🔄 המרה ל־WAV
+# 🔄 המרת MP3 ל-WAV לפי הדרישות של ימות
 def convert_to_wav(wav_filename):
-    subprocess.run([FFMPEG_PATH, "-y", "-i", MP3_FILE, "-ar", "24000", "-ac", "1", "-sample_fmt", "s16", wav_filename])
+    subprocess.run([
+        FFMPEG_PATH,
+        "-y",  # overwrite
+        "-i", MP3_FILE,
+        "-ar", "24000",
+        "-ac", "1",
+        "-acodec", "pcm_s16le",
+        wav_filename
+    ], check=True)
 
-# ⬆️ העלאה לימות המשיח
+# ⬆️ העלאה לימות
 def upload_to_yemot(wav_filename):
     with open(wav_filename, 'rb') as f:
         m = MultipartEncoder(
@@ -73,14 +81,14 @@ def upload_to_yemot(wav_filename):
         response = requests.post('https://www.call2all.co.il/ym/api/UploadFile', data=m, headers={'Content-Type': m.content_type})
         print("📤 הועלה לימות המשיח:", response.json())
 
-# 🧮 מציאת מספר קובץ פנוי
+# 🧮 מספר קובץ פנוי
 def get_next_filename():
     existing = [f for f in os.listdir() if re.fullmatch(r"amitsegal_\d{3}\.wav", f)]
     nums = [int(re.search(r"(\d{3})", f).group(1)) for f in existing]
     next_num = max(nums) + 1 if nums else 1
     return WAV_FILE_TEMPLATE.format(next_num)
 
-# 🔁 לולאת האזנה
+# 🔁 לולאה ראשית
 def main_loop():
     ensure_ffmpeg()
     last_seen = ""
@@ -94,7 +102,6 @@ def main_loop():
                 print("📄 תוכן:", current)
                 last_seen = current
 
-                import asyncio
                 asyncio.run(create_voice(current))
 
                 wav_file = get_next_filename()
@@ -104,7 +111,7 @@ def main_loop():
                 print("ℹ️ אין הודעות חדשות.")
         except Exception as e:
             print("❌ שגיאה:", e)
-        time.sleep(300)  # כל 5 דקות
+        time.sleep(300)
 
 if __name__ == "__main__":
     main_loop()
