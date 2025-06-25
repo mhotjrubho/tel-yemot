@@ -3,3 +3,4 @@ beautifulsoup4
 edge-tts
 requests-toolbelt
 imageio-ffmpeg
+pytz
