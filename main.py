@@ -1,14 +1,14 @@
 import os
 import time
 import requests
-import re
-import subprocess
-import urllib.request
-import tarfile
-import asyncio
 from bs4 import BeautifulSoup
 from edge_tts import Communicate
 from requests_toolbelt.multipart.encoder import MultipartEncoder
+import subprocess
+import urllib.request
+import tarfile
+import re
+import asyncio
 
 # ⚙️ פרטי התחברות למערכת ימות המשיח
 USERNAME = "0747097784"
@@ -17,8 +17,8 @@ TOKEN = f"{USERNAME}:{PASSWORD}"
 UPLOAD_PATH_PREFIX = "ivr2:/3/"
 
 # 🧾 שמות קבצים
-MP3_FILE = "amitsegal.mp3"
-WAV_FILE_TEMPLATE = "amitsegal_{:03}.wav"
+MP3_FILE = "news.mp3"
+WAV_FILE_TEMPLATE = "{:03}.wav"  # מספור בלבד: 000.wav, 001.wav וכו'
 FFMPEG_PATH = "./bin/ffmpeg"
 
 # ✅ הורדת ffmpeg אם לא קיים
@@ -36,7 +36,7 @@ def ensure_ffmpeg():
                     tar.extract(member, path="bin")
         os.chmod(FFMPEG_PATH, 0o755)
 
-# 🌐 שליפת ההודעה האחרונה מטלגרם
+# 🌐 שליפת ההודעה האחרונה מהערוץ
 def get_last_telegram_message(channel_username):
     url = f"https://t.me/s/{channel_username}"
     response = requests.get(url, verify=False)
@@ -50,24 +50,16 @@ def get_last_telegram_message(channel_username):
         return None
     return messages[-1].get_text(strip=True)
 
-# 🎙️ יצירת קול בקובץ MP3
+# 🧠 הפקת קול
 async def create_voice(text):
     communicate = Communicate(text=text, voice="he-IL-AvriNeural")
     await communicate.save(MP3_FILE)
 
-# 🔄 המרת MP3 ל-WAV לפי הדרישות של ימות
+# 🔄 המרה ל־WAV
 def convert_to_wav(wav_filename):
-    subprocess.run([
-        FFMPEG_PATH,
-        "-y",  # overwrite
-        "-i", MP3_FILE,
-        "-ar", "24000",
-        "-ac", "1",
-        "-acodec", "pcm_s16le",
-        wav_filename
-    ], check=True)
+    subprocess.run([FFMPEG_PATH, "-y", "-i", MP3_FILE, "-ar", "24000", "-ac", "1", "-sample_fmt", "s16", wav_filename])
 
-# ⬆️ העלאה לימות
+# ⬆️ העלאה לימות המשיח
 def upload_to_yemot(wav_filename):
     with open(wav_filename, 'rb') as f:
         m = MultipartEncoder(
@@ -81,14 +73,16 @@ def upload_to_yemot(wav_filename):
         response = requests.post('https://www.call2all.co.il/ym/api/UploadFile', data=m, headers={'Content-Type': m.content_type})
         print("📤 הועלה לימות המשיח:", response.json())
 
-# 🧮 מספר קובץ פנוי
+# 🧮 מציאת מספר קובץ פנוי
 def get_next_filename():
-    existing = [f for f in os.listdir() if re.fullmatch(r"amitsegal_\d{3}\.wav", f)]
-    nums = [int(re.search(r"(\d{3})", f).group(1)) for f in existing]
-    next_num = max(nums) + 1 if nums else 1
-    return WAV_FILE_TEMPLATE.format(next_num)
+    i = 0
+    while True:
+        filename = WAV_FILE_TEMPLATE.format(i)
+        if not os.path.exists(filename):
+            return filename
+        i += 1
 
-# 🔁 לולאה ראשית
+# 🔁 לולאת האזנה
 def main_loop():
     ensure_ffmpeg()
     last_seen = ""
@@ -103,7 +97,6 @@ def main_loop():
                 last_seen = current
 
                 asyncio.run(create_voice(current))
-
                 wav_file = get_next_filename()
                 convert_to_wav(wav_file)
                 upload_to_yemot(wav_file)
